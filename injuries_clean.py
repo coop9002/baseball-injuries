@@ -291,6 +291,306 @@ def calculate_avg_pitches_regular(player_id, lahman_id, season):
         return None
 
 
+def calculate_avg_spin_rate(player_id, season):
+    """
+    Calculate average spin rate for a player in a season.
+    
+    Args:
+        player_id (str): MLB player ID
+        season (int): Season year
+        
+    Returns:
+        float: Average spin rate or None if not available
+    """
+    if season < 2015:
+        return None
+    
+    try:
+        start_date = f'{season}-01-01'
+        end_date = f'{season}-12-31'
+        data = pb.statcast_pitcher(start_date, end_date, player_id)
+        
+        if data is None or data.empty:
+            return None
+        
+        if 'release_spin_rate' not in data.columns:
+            return None
+        
+        spin_data = data['release_spin_rate'].dropna()
+        
+        if spin_data.empty:
+            return None
+        
+        return spin_data.mean()
+        
+    except Exception as e:
+        return None
+
+
+def calculate_avg_pitch_velocity(player_id, season):
+    """
+    Calculate average pitch velocity for a player in a season (excluding playoff games).
+    
+    Args:
+        player_id (str): MLB player ID
+        season (int): Season year
+        
+    Returns:
+        float: Average pitch velocity or None if not available
+    """
+    if season < 2015:
+        return None
+    
+    try:
+        start_date = f'{season}-01-01'
+        end_date = f'{season}-12-31'
+        data = pb.statcast_pitcher(start_date, end_date, player_id)
+        
+        if data is None or data.empty:
+            return None
+        
+        regular_season = data[data['game_type'] == 'R']
+        
+        if regular_season.empty:
+            return None
+        
+        if 'release_speed' not in regular_season.columns:
+            return None
+        
+        velocity_data = regular_season['release_speed'].dropna()
+        
+        if velocity_data.empty:
+            return None
+        
+        return velocity_data.mean()
+        
+    except Exception as e:
+        return None
+
+
+def calculate_avg_velocity_playoff(player_id, season):
+    """
+    Calculate average pitch velocity per playoff game for a player in a season.
+    
+    Args:
+        player_id (str): MLB player ID
+        season (int): Season year
+        
+    Returns:
+        float: Average pitch velocity per playoff game or None if not available
+    """
+    if season < 2015:
+        return None
+    
+    try:
+        start_date = f'{season}-01-01'
+        end_date = f'{season}-12-31'
+        data = pb.statcast_pitcher(start_date, end_date, player_id)
+        
+        if data is None or data.empty:
+            return None
+        
+        playoffs = data[data['game_type'].isin(['D', 'L', 'W'])]
+        
+        if playoffs.empty:
+            return None
+        
+        if 'release_speed' not in playoffs.columns:
+            return None
+        
+        velocity_data = playoffs['release_speed'].dropna()
+        
+        if velocity_data.empty:
+            return None
+        
+        return velocity_data.mean()
+        
+    except Exception as e:
+        return None
+
+
+def calculate_games_started(player_id, lahman_id, season):
+    """
+    Calculate games started for a player in a season.
+    
+    Args:
+        player_id (str): MLB player ID
+        lahman_id (str): Lahman player ID
+        season (int): Season year
+        
+    Returns:
+        int: Games started or None if not available
+    """
+    global pitching_reg
+    
+    if pitching_reg is not None and lahman_id is not None:
+        player_reg = pitching_reg[(pitching_reg['playerID'] == lahman_id) & (pitching_reg['yearID'] == season)]
+        if not player_reg.empty:
+            gs = player_reg['GS'].sum()
+            return int(gs) if gs > 0 else 0
+    
+    if season >= 2015:
+        try:
+            start_date = f'{season}-01-01'
+            end_date = f'{season}-12-31'
+            data = pb.statcast_pitcher(start_date, end_date, player_id)
+            
+            if data is None or data.empty:
+                return None
+            
+            regular_season = data[data['game_type'] == 'R']
+            
+            if regular_season.empty:
+                return None
+            
+            if 'game_pk' not in regular_season.columns or 'inning' not in regular_season.columns:
+                return None
+            
+            games_started = 0
+            for game_id in regular_season['game_pk'].unique():
+                game_data = regular_season[regular_season['game_pk'] == game_id]
+                if not game_data.empty and game_data['inning'].min() == 1:
+                    games_started += 1
+            
+            return games_started if games_started > 0 else 0
+            
+        except Exception as e:
+            return None
+    
+    return None
+
+
+def calculate_saves(player_id, lahman_id, season):
+    """
+    Calculate saves for a player in a season.
+    
+    Args:
+        player_id (str): MLB player ID
+        lahman_id (str): Lahman player ID
+        season (int): Season year
+        
+    Returns:
+        int: Saves or None if not available
+    """
+    global pitching_reg
+    
+    if pitching_reg is not None and lahman_id is not None:
+        player_reg = pitching_reg[(pitching_reg['playerID'] == lahman_id) & (pitching_reg['yearID'] == season)]
+        if not player_reg.empty:
+            sv = player_reg['SV'].sum()
+            return int(sv) if sv > 0 else 0
+    
+    return None
+
+
+def calculate_relief_appearances(player_id, lahman_id, season):
+    """
+    Calculate relief appearances (games without starts) for a player in a season.
+    
+    Args:
+        player_id (str): MLB player ID
+        lahman_id (str): Lahman player ID
+        season (int): Season year
+        
+    Returns:
+        int: Relief appearances or None if not available
+    """
+    global pitching_reg
+    
+    if pitching_reg is not None and lahman_id is not None:
+        player_reg = pitching_reg[(pitching_reg['playerID'] == lahman_id) & (pitching_reg['yearID'] == season)]
+        if not player_reg.empty:
+            g = player_reg['G'].sum()
+            gs = player_reg['GS'].sum()
+            relief = g - gs
+            return int(relief) if relief > 0 else 0
+    
+    if season >= 2015:
+        try:
+            start_date = f'{season}-01-01'
+            end_date = f'{season}-12-31'
+            data = pb.statcast_pitcher(start_date, end_date, player_id)
+            
+            if data is None or data.empty:
+                return None
+            
+            regular_season = data[data['game_type'] == 'R']
+            
+            if regular_season.empty:
+                return None
+            
+            if 'game_pk' not in regular_season.columns or 'inning' not in regular_season.columns:
+                return None
+            
+            total_games = regular_season['game_pk'].nunique()
+            games_started = 0
+            for game_id in regular_season['game_pk'].unique():
+                game_data = regular_season[regular_season['game_pk'] == game_id]
+                if not game_data.empty and game_data['inning'].min() == 1:
+                    games_started += 1
+            
+            relief = total_games - games_started
+            return relief if relief > 0 else 0
+            
+        except Exception as e:
+            return None
+    
+    return None
+
+
+def calculate_pitch_mix(player_id, season):
+    """
+    Calculate pitch mix percentages for a player in a season.
+    Returns percentages for major pitch types: FF, SI, SL, CU, CH, FC.
+    
+    Args:
+        player_id (str): MLB player ID
+        season (int): Season year
+        
+    Returns:
+        dict: Dictionary with pitch type percentages (FF, SI, SL, CU, CH, FC) or None if not available
+    """
+    if season < 2015:
+        return None
+    
+    try:
+        start_date = f'{season}-01-01'
+        end_date = f'{season}-12-31'
+        data = pb.statcast_pitcher(start_date, end_date, player_id)
+        
+        if data is None or data.empty:
+            return None
+        
+        regular_season = data[data['game_type'] == 'R']
+        
+        if regular_season.empty:
+            return None
+        
+        if 'pitch_type' not in regular_season.columns:
+            return None
+        
+        pitch_counts = regular_season['pitch_type'].value_counts()
+        total_pitches = len(regular_season)
+        
+        if total_pitches == 0:
+            return None
+        
+        pitch_types = ['FF', 'SI', 'SL', 'CU', 'CH', 'FC']
+        pitch_mix = {}
+        
+        for pitch_type in pitch_types:
+            if pitch_type in pitch_counts.index:
+                percentage = (pitch_counts[pitch_type] / total_pitches) * 100
+                pitch_mix[pitch_type] = round(percentage, 2)
+            else:
+                pitch_mix[pitch_type] = 0.0
+        
+        return pitch_mix
+        
+    except Exception as e:
+        return None
+
+
 def main():
     """
     Main function to run the baseball injury data analysis.
@@ -302,7 +602,11 @@ def main():
     if os.path.exists(output_path):
         processed_data = pd.read_csv(output_path)
         new_columns_added = False
-        avg_columns = ['avg_pitches_t_minus_4', 'avg_pitches_t_minus_3', 'avg_pitches_t_minus_2', 'avg_pitches_before', 'avg_pitches_after', 'avg_pitches_t_plus_2', 'avg_pitches_t_plus_3', 'avg_pitches_t_plus_4', 'avg_pitches_regular_t_minus_4', 'avg_pitches_regular_t_minus_3', 'avg_pitches_regular_t_minus_2', 'avg_pitches_regular_t_minus_1', 'avg_pitches_regular_t_plus_1', 'avg_pitches_regular_t_plus_2', 'avg_pitches_regular_t_plus_3', 'avg_pitches_regular_t_plus_4']
+        pitch_types = ['FF', 'SI', 'SL', 'CU', 'CH', 'FC']
+        time_periods = ['t_minus_4', 't_minus_3', 't_minus_2', 't_minus_1', 't_plus_1', 't_plus_2', 't_plus_3', 't_plus_4']
+        pitch_mix_columns = [f'{pitch_type.lower()}_pct_{period}' for pitch_type in pitch_types for period in time_periods]
+        
+        avg_columns = ['avg_pitches_t_minus_4', 'avg_pitches_t_minus_3', 'avg_pitches_t_minus_2', 'avg_pitches_before', 'avg_pitches_after', 'avg_pitches_t_plus_2', 'avg_pitches_t_plus_3', 'avg_pitches_t_plus_4', 'avg_pitches_regular_t_minus_4', 'avg_pitches_regular_t_minus_3', 'avg_pitches_regular_t_minus_2', 'avg_pitches_regular_t_minus_1', 'avg_pitches_regular_t_plus_1', 'avg_pitches_regular_t_plus_2', 'avg_pitches_regular_t_plus_3', 'avg_pitches_regular_t_plus_4', 'avg_spin_rate_t_minus_4', 'avg_spin_rate_t_minus_3', 'avg_spin_rate_t_minus_2', 'avg_spin_rate_t_minus_1', 'avg_spin_rate_t_plus_1', 'avg_spin_rate_t_plus_2', 'avg_spin_rate_t_plus_3', 'avg_spin_rate_t_plus_4', 'avg_velocity_t_minus_4', 'avg_velocity_t_minus_3', 'avg_velocity_t_minus_2', 'avg_velocity_t_minus_1', 'avg_velocity_t_plus_1', 'avg_velocity_t_plus_2', 'avg_velocity_t_plus_3', 'avg_velocity_t_plus_4', 'avg_velocity_playoff_t_minus_4', 'avg_velocity_playoff_t_minus_3', 'avg_velocity_playoff_t_minus_2', 'avg_velocity_playoff_t_minus_1', 'avg_velocity_playoff_t_plus_1', 'avg_velocity_playoff_t_plus_2', 'avg_velocity_playoff_t_plus_3', 'avg_velocity_playoff_t_plus_4', 'gs_t_minus_4', 'gs_t_minus_3', 'gs_t_minus_2', 'gs_t_minus_1', 'gs_t_plus_1', 'gs_t_plus_2', 'gs_t_plus_3', 'gs_t_plus_4', 'sv_t_minus_4', 'sv_t_minus_3', 'sv_t_minus_2', 'sv_t_minus_1', 'sv_t_plus_1', 'sv_t_plus_2', 'sv_t_plus_3', 'sv_t_plus_4', 'relief_app_t_minus_4', 'relief_app_t_minus_3', 'relief_app_t_minus_2', 'relief_app_t_minus_1', 'relief_app_t_plus_1', 'relief_app_t_plus_2', 'relief_app_t_plus_3', 'relief_app_t_plus_4'] + pitch_mix_columns
         for col in avg_columns:
             if col not in processed_data.columns:
                 processed_data[col] = None
@@ -345,64 +649,187 @@ def main():
             t_plus_3_season = injury_year + 3
             t_plus_4_season = injury_year + 4
             
-            if ('avg_pitches_t_minus_4' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_t_minus_4'] is not None and
-                'avg_pitches_t_minus_3' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_t_minus_3'] is not None and
-                'avg_pitches_t_minus_2' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_t_minus_2'] is not None and
-                'avg_pitches_before' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_before'] is not None and
-                'avg_pitches_after' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_after'] is not None and
-                'avg_pitches_t_plus_2' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_t_plus_2'] is not None and
-                'avg_pitches_t_plus_3' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_t_plus_3'] is not None and
-                'avg_pitches_t_plus_4' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_t_plus_4'] is not None and
-                'avg_pitches_regular_t_minus_4' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_regular_t_minus_4'] is not None and
-                'avg_pitches_regular_t_minus_3' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_regular_t_minus_3'] is not None and
-                'avg_pitches_regular_t_minus_2' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_regular_t_minus_2'] is not None and
-                'avg_pitches_regular_t_minus_1' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_regular_t_minus_1'] is not None and
-                'avg_pitches_regular_t_plus_1' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_regular_t_plus_1'] is not None and
-                'avg_pitches_regular_t_plus_2' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_regular_t_plus_2'] is not None and
-                'avg_pitches_regular_t_plus_3' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_regular_t_plus_3'] is not None and
-                'avg_pitches_regular_t_plus_4' in cleaned_data.columns and cleaned_data.at[idx, 'avg_pitches_regular_t_plus_4'] is not None):
-                avg_t_minus_4 = cleaned_data.at[idx, 'avg_pitches_t_minus_4']
-                avg_t_minus_3 = cleaned_data.at[idx, 'avg_pitches_t_minus_3']
-                avg_t_minus_2 = cleaned_data.at[idx, 'avg_pitches_t_minus_2']
-                avg_before = cleaned_data.at[idx, 'avg_pitches_before']
-                avg_after = cleaned_data.at[idx, 'avg_pitches_after']
-                avg_t_plus_2 = cleaned_data.at[idx, 'avg_pitches_t_plus_2']
-                avg_t_plus_3 = cleaned_data.at[idx, 'avg_pitches_t_plus_3']
-                avg_t_plus_4 = cleaned_data.at[idx, 'avg_pitches_t_plus_4']
-                avg_regular_t_minus_4 = cleaned_data.at[idx, 'avg_pitches_regular_t_minus_4']
-                avg_regular_t_minus_3 = cleaned_data.at[idx, 'avg_pitches_regular_t_minus_3']
-                avg_regular_t_minus_2 = cleaned_data.at[idx, 'avg_pitches_regular_t_minus_2']
-                avg_regular_t_minus_1 = cleaned_data.at[idx, 'avg_pitches_regular_t_minus_1']
-                avg_regular_t_plus_1 = cleaned_data.at[idx, 'avg_pitches_regular_t_plus_1']
-                avg_regular_t_plus_2 = cleaned_data.at[idx, 'avg_pitches_regular_t_plus_2']
-                avg_regular_t_plus_3 = cleaned_data.at[idx, 'avg_pitches_regular_t_plus_3']
-                avg_regular_t_plus_4 = cleaned_data.at[idx, 'avg_pitches_regular_t_plus_4']
-            else:
-                avg_t_minus_4 = calculate_avg_pitches_playoff(player_id, lahman_id, t_minus_4_season)
-                avg_t_minus_3 = calculate_avg_pitches_playoff(player_id, lahman_id, t_minus_3_season)
-                avg_t_minus_2 = calculate_avg_pitches_playoff(player_id, lahman_id, t_minus_2_season)
-                avg_before = calculate_avg_pitches_playoff(player_id, lahman_id, t_minus_1_season)
-                avg_after = calculate_avg_pitches_playoff(player_id, lahman_id, t_plus_1_season)
-                avg_t_plus_2 = calculate_avg_pitches_playoff(player_id, lahman_id, t_plus_2_season)
-                avg_t_plus_3 = calculate_avg_pitches_playoff(player_id, lahman_id, t_plus_3_season)
-                avg_t_plus_4 = calculate_avg_pitches_playoff(player_id, lahman_id, t_plus_4_season)
-                avg_regular_t_minus_4 = calculate_avg_pitches_regular(player_id, lahman_id, t_minus_4_season)
-                avg_regular_t_minus_3 = calculate_avg_pitches_regular(player_id, lahman_id, t_minus_3_season)
-                avg_regular_t_minus_2 = calculate_avg_pitches_regular(player_id, lahman_id, t_minus_2_season)
-                avg_regular_t_minus_1 = calculate_avg_pitches_regular(player_id, lahman_id, t_minus_1_season)
-                avg_regular_t_plus_1 = calculate_avg_pitches_regular(player_id, lahman_id, t_plus_1_season)
-                avg_regular_t_plus_2 = calculate_avg_pitches_regular(player_id, lahman_id, t_plus_2_season)
-                avg_regular_t_plus_3 = calculate_avg_pitches_regular(player_id, lahman_id, t_plus_3_season)
-                avg_regular_t_plus_4 = calculate_avg_pitches_regular(player_id, lahman_id, t_plus_4_season)
+            def get_or_compute(col_name, compute_func, *args):
+                if col_name in cleaned_data.columns and pd.notna(cleaned_data.at[idx, col_name]):
+                    return cleaned_data.at[idx, col_name]
+                return compute_func(*args)
+            
+            avg_t_minus_4 = get_or_compute('avg_pitches_t_minus_4', calculate_avg_pitches_playoff, player_id, lahman_id, t_minus_4_season)
+            avg_t_minus_3 = get_or_compute('avg_pitches_t_minus_3', calculate_avg_pitches_playoff, player_id, lahman_id, t_minus_3_season)
+            avg_t_minus_2 = get_or_compute('avg_pitches_t_minus_2', calculate_avg_pitches_playoff, player_id, lahman_id, t_minus_2_season)
+            avg_before = get_or_compute('avg_pitches_before', calculate_avg_pitches_playoff, player_id, lahman_id, t_minus_1_season)
+            avg_after = get_or_compute('avg_pitches_after', calculate_avg_pitches_playoff, player_id, lahman_id, t_plus_1_season)
+            avg_t_plus_2 = get_or_compute('avg_pitches_t_plus_2', calculate_avg_pitches_playoff, player_id, lahman_id, t_plus_2_season)
+            avg_t_plus_3 = get_or_compute('avg_pitches_t_plus_3', calculate_avg_pitches_playoff, player_id, lahman_id, t_plus_3_season)
+            avg_t_plus_4 = get_or_compute('avg_pitches_t_plus_4', calculate_avg_pitches_playoff, player_id, lahman_id, t_plus_4_season)
+            
+            avg_regular_t_minus_4 = get_or_compute('avg_pitches_regular_t_minus_4', calculate_avg_pitches_regular, player_id, lahman_id, t_minus_4_season)
+            avg_regular_t_minus_3 = get_or_compute('avg_pitches_regular_t_minus_3', calculate_avg_pitches_regular, player_id, lahman_id, t_minus_3_season)
+            avg_regular_t_minus_2 = get_or_compute('avg_pitches_regular_t_minus_2', calculate_avg_pitches_regular, player_id, lahman_id, t_minus_2_season)
+            avg_regular_t_minus_1 = get_or_compute('avg_pitches_regular_t_minus_1', calculate_avg_pitches_regular, player_id, lahman_id, t_minus_1_season)
+            avg_regular_t_plus_1 = get_or_compute('avg_pitches_regular_t_plus_1', calculate_avg_pitches_regular, player_id, lahman_id, t_plus_1_season)
+            avg_regular_t_plus_2 = get_or_compute('avg_pitches_regular_t_plus_2', calculate_avg_pitches_regular, player_id, lahman_id, t_plus_2_season)
+            avg_regular_t_plus_3 = get_or_compute('avg_pitches_regular_t_plus_3', calculate_avg_pitches_regular, player_id, lahman_id, t_plus_3_season)
+            avg_regular_t_plus_4 = get_or_compute('avg_pitches_regular_t_plus_4', calculate_avg_pitches_regular, player_id, lahman_id, t_plus_4_season)
+            
+            avg_spin_t_minus_4 = get_or_compute('avg_spin_rate_t_minus_4', calculate_avg_spin_rate, player_id, t_minus_4_season)
+            avg_spin_t_minus_3 = get_or_compute('avg_spin_rate_t_minus_3', calculate_avg_spin_rate, player_id, t_minus_3_season)
+            avg_spin_t_minus_2 = get_or_compute('avg_spin_rate_t_minus_2', calculate_avg_spin_rate, player_id, t_minus_2_season)
+            avg_spin_t_minus_1 = get_or_compute('avg_spin_rate_t_minus_1', calculate_avg_spin_rate, player_id, t_minus_1_season)
+            avg_spin_t_plus_1 = get_or_compute('avg_spin_rate_t_plus_1', calculate_avg_spin_rate, player_id, t_plus_1_season)
+            avg_spin_t_plus_2 = get_or_compute('avg_spin_rate_t_plus_2', calculate_avg_spin_rate, player_id, t_plus_2_season)
+            avg_spin_t_plus_3 = get_or_compute('avg_spin_rate_t_plus_3', calculate_avg_spin_rate, player_id, t_plus_3_season)
+            avg_spin_t_plus_4 = get_or_compute('avg_spin_rate_t_plus_4', calculate_avg_spin_rate, player_id, t_plus_4_season)
+            
+            avg_velocity_t_minus_4 = get_or_compute('avg_velocity_t_minus_4', calculate_avg_pitch_velocity, player_id, t_minus_4_season)
+            avg_velocity_t_minus_3 = get_or_compute('avg_velocity_t_minus_3', calculate_avg_pitch_velocity, player_id, t_minus_3_season)
+            avg_velocity_t_minus_2 = get_or_compute('avg_velocity_t_minus_2', calculate_avg_pitch_velocity, player_id, t_minus_2_season)
+            avg_velocity_t_minus_1 = get_or_compute('avg_velocity_t_minus_1', calculate_avg_pitch_velocity, player_id, t_minus_1_season)
+            avg_velocity_t_plus_1 = get_or_compute('avg_velocity_t_plus_1', calculate_avg_pitch_velocity, player_id, t_plus_1_season)
+            avg_velocity_t_plus_2 = get_or_compute('avg_velocity_t_plus_2', calculate_avg_pitch_velocity, player_id, t_plus_2_season)
+            avg_velocity_t_plus_3 = get_or_compute('avg_velocity_t_plus_3', calculate_avg_pitch_velocity, player_id, t_plus_3_season)
+            avg_velocity_t_plus_4 = get_or_compute('avg_velocity_t_plus_4', calculate_avg_pitch_velocity, player_id, t_plus_4_season)
+            
+            avg_velocity_playoff_t_minus_4 = get_or_compute('avg_velocity_playoff_t_minus_4', calculate_avg_velocity_playoff, player_id, t_minus_4_season)
+            avg_velocity_playoff_t_minus_3 = get_or_compute('avg_velocity_playoff_t_minus_3', calculate_avg_velocity_playoff, player_id, t_minus_3_season)
+            avg_velocity_playoff_t_minus_2 = get_or_compute('avg_velocity_playoff_t_minus_2', calculate_avg_velocity_playoff, player_id, t_minus_2_season)
+            avg_velocity_playoff_t_minus_1 = get_or_compute('avg_velocity_playoff_t_minus_1', calculate_avg_velocity_playoff, player_id, t_minus_1_season)
+            avg_velocity_playoff_t_plus_1 = get_or_compute('avg_velocity_playoff_t_plus_1', calculate_avg_velocity_playoff, player_id, t_plus_1_season)
+            avg_velocity_playoff_t_plus_2 = get_or_compute('avg_velocity_playoff_t_plus_2', calculate_avg_velocity_playoff, player_id, t_plus_2_season)
+            avg_velocity_playoff_t_plus_3 = get_or_compute('avg_velocity_playoff_t_plus_3', calculate_avg_velocity_playoff, player_id, t_plus_3_season)
+            avg_velocity_playoff_t_plus_4 = get_or_compute('avg_velocity_playoff_t_plus_4', calculate_avg_velocity_playoff, player_id, t_plus_4_season)
+            
+            gs_t_minus_4 = get_or_compute('gs_t_minus_4', calculate_games_started, player_id, lahman_id, t_minus_4_season)
+            gs_t_minus_3 = get_or_compute('gs_t_minus_3', calculate_games_started, player_id, lahman_id, t_minus_3_season)
+            gs_t_minus_2 = get_or_compute('gs_t_minus_2', calculate_games_started, player_id, lahman_id, t_minus_2_season)
+            gs_t_minus_1 = get_or_compute('gs_t_minus_1', calculate_games_started, player_id, lahman_id, t_minus_1_season)
+            gs_t_plus_1 = get_or_compute('gs_t_plus_1', calculate_games_started, player_id, lahman_id, t_plus_1_season)
+            gs_t_plus_2 = get_or_compute('gs_t_plus_2', calculate_games_started, player_id, lahman_id, t_plus_2_season)
+            gs_t_plus_3 = get_or_compute('gs_t_plus_3', calculate_games_started, player_id, lahman_id, t_plus_3_season)
+            gs_t_plus_4 = get_or_compute('gs_t_plus_4', calculate_games_started, player_id, lahman_id, t_plus_4_season)
+            
+            sv_t_minus_4 = get_or_compute('sv_t_minus_4', calculate_saves, player_id, lahman_id, t_minus_4_season)
+            sv_t_minus_3 = get_or_compute('sv_t_minus_3', calculate_saves, player_id, lahman_id, t_minus_3_season)
+            sv_t_minus_2 = get_or_compute('sv_t_minus_2', calculate_saves, player_id, lahman_id, t_minus_2_season)
+            sv_t_minus_1 = get_or_compute('sv_t_minus_1', calculate_saves, player_id, lahman_id, t_minus_1_season)
+            sv_t_plus_1 = get_or_compute('sv_t_plus_1', calculate_saves, player_id, lahman_id, t_plus_1_season)
+            sv_t_plus_2 = get_or_compute('sv_t_plus_2', calculate_saves, player_id, lahman_id, t_plus_2_season)
+            sv_t_plus_3 = get_or_compute('sv_t_plus_3', calculate_saves, player_id, lahman_id, t_plus_3_season)
+            sv_t_plus_4 = get_or_compute('sv_t_plus_4', calculate_saves, player_id, lahman_id, t_plus_4_season)
+            
+            relief_app_t_minus_4 = get_or_compute('relief_app_t_minus_4', calculate_relief_appearances, player_id, lahman_id, t_minus_4_season)
+            relief_app_t_minus_3 = get_or_compute('relief_app_t_minus_3', calculate_relief_appearances, player_id, lahman_id, t_minus_3_season)
+            relief_app_t_minus_2 = get_or_compute('relief_app_t_minus_2', calculate_relief_appearances, player_id, lahman_id, t_minus_2_season)
+            relief_app_t_minus_1 = get_or_compute('relief_app_t_minus_1', calculate_relief_appearances, player_id, lahman_id, t_minus_1_season)
+            relief_app_t_plus_1 = get_or_compute('relief_app_t_plus_1', calculate_relief_appearances, player_id, lahman_id, t_plus_1_season)
+            relief_app_t_plus_2 = get_or_compute('relief_app_t_plus_2', calculate_relief_appearances, player_id, lahman_id, t_plus_2_season)
+            relief_app_t_plus_3 = get_or_compute('relief_app_t_plus_3', calculate_relief_appearances, player_id, lahman_id, t_plus_3_season)
+            relief_app_t_plus_4 = get_or_compute('relief_app_t_plus_4', calculate_relief_appearances, player_id, lahman_id, t_plus_4_season)
+            
+            def get_pitch_mix_value(pitch_mix_dict, pitch_type, period):
+                col_name = f'{pitch_type.lower()}_pct_{period}'
+                if col_name in cleaned_data.columns and pd.notna(cleaned_data.at[idx, col_name]):
+                    return cleaned_data.at[idx, col_name]
+                if pitch_mix_dict is None:
+                    return None
+                return pitch_mix_dict.get(pitch_type, 0.0)
+            
+            pitch_mix_t_minus_4 = calculate_pitch_mix(player_id, t_minus_4_season)
+            pitch_mix_t_minus_3 = calculate_pitch_mix(player_id, t_minus_3_season)
+            pitch_mix_t_minus_2 = calculate_pitch_mix(player_id, t_minus_2_season)
+            pitch_mix_t_minus_1 = calculate_pitch_mix(player_id, t_minus_1_season)
+            pitch_mix_t_plus_1 = calculate_pitch_mix(player_id, t_plus_1_season)
+            pitch_mix_t_plus_2 = calculate_pitch_mix(player_id, t_plus_2_season)
+            pitch_mix_t_plus_3 = calculate_pitch_mix(player_id, t_plus_3_season)
+            pitch_mix_t_plus_4 = calculate_pitch_mix(player_id, t_plus_4_season)
+            
+            ff_pct_t_minus_4 = get_pitch_mix_value(pitch_mix_t_minus_4, 'FF', 't_minus_4')
+            ff_pct_t_minus_3 = get_pitch_mix_value(pitch_mix_t_minus_3, 'FF', 't_minus_3')
+            ff_pct_t_minus_2 = get_pitch_mix_value(pitch_mix_t_minus_2, 'FF', 't_minus_2')
+            ff_pct_t_minus_1 = get_pitch_mix_value(pitch_mix_t_minus_1, 'FF', 't_minus_1')
+            ff_pct_t_plus_1 = get_pitch_mix_value(pitch_mix_t_plus_1, 'FF', 't_plus_1')
+            ff_pct_t_plus_2 = get_pitch_mix_value(pitch_mix_t_plus_2, 'FF', 't_plus_2')
+            ff_pct_t_plus_3 = get_pitch_mix_value(pitch_mix_t_plus_3, 'FF', 't_plus_3')
+            ff_pct_t_plus_4 = get_pitch_mix_value(pitch_mix_t_plus_4, 'FF', 't_plus_4')
+            
+            si_pct_t_minus_4 = get_pitch_mix_value(pitch_mix_t_minus_4, 'SI', 't_minus_4')
+            si_pct_t_minus_3 = get_pitch_mix_value(pitch_mix_t_minus_3, 'SI', 't_minus_3')
+            si_pct_t_minus_2 = get_pitch_mix_value(pitch_mix_t_minus_2, 'SI', 't_minus_2')
+            si_pct_t_minus_1 = get_pitch_mix_value(pitch_mix_t_minus_1, 'SI', 't_minus_1')
+            si_pct_t_plus_1 = get_pitch_mix_value(pitch_mix_t_plus_1, 'SI', 't_plus_1')
+            si_pct_t_plus_2 = get_pitch_mix_value(pitch_mix_t_plus_2, 'SI', 't_plus_2')
+            si_pct_t_plus_3 = get_pitch_mix_value(pitch_mix_t_plus_3, 'SI', 't_plus_3')
+            si_pct_t_plus_4 = get_pitch_mix_value(pitch_mix_t_plus_4, 'SI', 't_plus_4')
+            
+            sl_pct_t_minus_4 = get_pitch_mix_value(pitch_mix_t_minus_4, 'SL', 't_minus_4')
+            sl_pct_t_minus_3 = get_pitch_mix_value(pitch_mix_t_minus_3, 'SL', 't_minus_3')
+            sl_pct_t_minus_2 = get_pitch_mix_value(pitch_mix_t_minus_2, 'SL', 't_minus_2')
+            sl_pct_t_minus_1 = get_pitch_mix_value(pitch_mix_t_minus_1, 'SL', 't_minus_1')
+            sl_pct_t_plus_1 = get_pitch_mix_value(pitch_mix_t_plus_1, 'SL', 't_plus_1')
+            sl_pct_t_plus_2 = get_pitch_mix_value(pitch_mix_t_plus_2, 'SL', 't_plus_2')
+            sl_pct_t_plus_3 = get_pitch_mix_value(pitch_mix_t_plus_3, 'SL', 't_plus_3')
+            sl_pct_t_plus_4 = get_pitch_mix_value(pitch_mix_t_plus_4, 'SL', 't_plus_4')
+            
+            cu_pct_t_minus_4 = get_pitch_mix_value(pitch_mix_t_minus_4, 'CU', 't_minus_4')
+            cu_pct_t_minus_3 = get_pitch_mix_value(pitch_mix_t_minus_3, 'CU', 't_minus_3')
+            cu_pct_t_minus_2 = get_pitch_mix_value(pitch_mix_t_minus_2, 'CU', 't_minus_2')
+            cu_pct_t_minus_1 = get_pitch_mix_value(pitch_mix_t_minus_1, 'CU', 't_minus_1')
+            cu_pct_t_plus_1 = get_pitch_mix_value(pitch_mix_t_plus_1, 'CU', 't_plus_1')
+            cu_pct_t_plus_2 = get_pitch_mix_value(pitch_mix_t_plus_2, 'CU', 't_plus_2')
+            cu_pct_t_plus_3 = get_pitch_mix_value(pitch_mix_t_plus_3, 'CU', 't_plus_3')
+            cu_pct_t_plus_4 = get_pitch_mix_value(pitch_mix_t_plus_4, 'CU', 't_plus_4')
+            
+            ch_pct_t_minus_4 = get_pitch_mix_value(pitch_mix_t_minus_4, 'CH', 't_minus_4')
+            ch_pct_t_minus_3 = get_pitch_mix_value(pitch_mix_t_minus_3, 'CH', 't_minus_3')
+            ch_pct_t_minus_2 = get_pitch_mix_value(pitch_mix_t_minus_2, 'CH', 't_minus_2')
+            ch_pct_t_minus_1 = get_pitch_mix_value(pitch_mix_t_minus_1, 'CH', 't_minus_1')
+            ch_pct_t_plus_1 = get_pitch_mix_value(pitch_mix_t_plus_1, 'CH', 't_plus_1')
+            ch_pct_t_plus_2 = get_pitch_mix_value(pitch_mix_t_plus_2, 'CH', 't_plus_2')
+            ch_pct_t_plus_3 = get_pitch_mix_value(pitch_mix_t_plus_3, 'CH', 't_plus_3')
+            ch_pct_t_plus_4 = get_pitch_mix_value(pitch_mix_t_plus_4, 'CH', 't_plus_4')
+            
+            fc_pct_t_minus_4 = get_pitch_mix_value(pitch_mix_t_minus_4, 'FC', 't_minus_4')
+            fc_pct_t_minus_3 = get_pitch_mix_value(pitch_mix_t_minus_3, 'FC', 't_minus_3')
+            fc_pct_t_minus_2 = get_pitch_mix_value(pitch_mix_t_minus_2, 'FC', 't_minus_2')
+            fc_pct_t_minus_1 = get_pitch_mix_value(pitch_mix_t_minus_1, 'FC', 't_minus_1')
+            fc_pct_t_plus_1 = get_pitch_mix_value(pitch_mix_t_plus_1, 'FC', 't_plus_1')
+            fc_pct_t_plus_2 = get_pitch_mix_value(pitch_mix_t_plus_2, 'FC', 't_plus_2')
+            fc_pct_t_plus_3 = get_pitch_mix_value(pitch_mix_t_plus_3, 'FC', 't_plus_3')
+            fc_pct_t_plus_4 = get_pitch_mix_value(pitch_mix_t_plus_4, 'FC', 't_plus_4')
+            
             return (idx, avg_t_minus_4, avg_t_minus_3, avg_t_minus_2, avg_before, avg_after, avg_t_plus_2, avg_t_plus_3, avg_t_plus_4,
-                    avg_regular_t_minus_4, avg_regular_t_minus_3, avg_regular_t_minus_2, avg_regular_t_minus_1, avg_regular_t_plus_1, avg_regular_t_plus_2, avg_regular_t_plus_3, avg_regular_t_plus_4)
+                    avg_regular_t_minus_4, avg_regular_t_minus_3, avg_regular_t_minus_2, avg_regular_t_minus_1, avg_regular_t_plus_1, avg_regular_t_plus_2, avg_regular_t_plus_3, avg_regular_t_plus_4,
+                    avg_spin_t_minus_4, avg_spin_t_minus_3, avg_spin_t_minus_2, avg_spin_t_minus_1, avg_spin_t_plus_1, avg_spin_t_plus_2, avg_spin_t_plus_3, avg_spin_t_plus_4,
+                    avg_velocity_t_minus_4, avg_velocity_t_minus_3, avg_velocity_t_minus_2, avg_velocity_t_minus_1, avg_velocity_t_plus_1, avg_velocity_t_plus_2, avg_velocity_t_plus_3, avg_velocity_t_plus_4,
+                    avg_velocity_playoff_t_minus_4, avg_velocity_playoff_t_minus_3, avg_velocity_playoff_t_minus_2, avg_velocity_playoff_t_minus_1, avg_velocity_playoff_t_plus_1, avg_velocity_playoff_t_plus_2, avg_velocity_playoff_t_plus_3, avg_velocity_playoff_t_plus_4,
+                    gs_t_minus_4, gs_t_minus_3, gs_t_minus_2, gs_t_minus_1, gs_t_plus_1, gs_t_plus_2, gs_t_plus_3, gs_t_plus_4,
+                    sv_t_minus_4, sv_t_minus_3, sv_t_minus_2, sv_t_minus_1, sv_t_plus_1, sv_t_plus_2, sv_t_plus_3, sv_t_plus_4,
+                    relief_app_t_minus_4, relief_app_t_minus_3, relief_app_t_minus_2, relief_app_t_minus_1, relief_app_t_plus_1, relief_app_t_plus_2, relief_app_t_plus_3, relief_app_t_plus_4,
+                    ff_pct_t_minus_4, ff_pct_t_minus_3, ff_pct_t_minus_2, ff_pct_t_minus_1, ff_pct_t_plus_1, ff_pct_t_plus_2, ff_pct_t_plus_3, ff_pct_t_plus_4,
+                    si_pct_t_minus_4, si_pct_t_minus_3, si_pct_t_minus_2, si_pct_t_minus_1, si_pct_t_plus_1, si_pct_t_plus_2, si_pct_t_plus_3, si_pct_t_plus_4,
+                    sl_pct_t_minus_4, sl_pct_t_minus_3, sl_pct_t_minus_2, sl_pct_t_minus_1, sl_pct_t_plus_1, sl_pct_t_plus_2, sl_pct_t_plus_3, sl_pct_t_plus_4,
+                    cu_pct_t_minus_4, cu_pct_t_minus_3, cu_pct_t_minus_2, cu_pct_t_minus_1, cu_pct_t_plus_1, cu_pct_t_plus_2, cu_pct_t_plus_3, cu_pct_t_plus_4,
+                    ch_pct_t_minus_4, ch_pct_t_minus_3, ch_pct_t_minus_2, ch_pct_t_minus_1, ch_pct_t_plus_1, ch_pct_t_plus_2, ch_pct_t_plus_3, ch_pct_t_plus_4,
+                    fc_pct_t_minus_4, fc_pct_t_minus_3, fc_pct_t_minus_2, fc_pct_t_minus_1, fc_pct_t_plus_1, fc_pct_t_plus_2, fc_pct_t_plus_3, fc_pct_t_plus_4)
         
         players_no_data = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             futures = [executor.submit(compute_averages, idx, row['player_id'], row['lahman_id'], row['Injury_Year']) for idx, row in cleaned_data.iterrows()]
             for future in concurrent.futures.as_completed(futures):
                 (idx, avg_t_minus_4, avg_t_minus_3, avg_t_minus_2, avg_before, avg_after, avg_t_plus_2, avg_t_plus_3, avg_t_plus_4,
-                 avg_regular_t_minus_4, avg_regular_t_minus_3, avg_regular_t_minus_2, avg_regular_t_minus_1, avg_regular_t_plus_1, avg_regular_t_plus_2, avg_regular_t_plus_3, avg_regular_t_plus_4) = future.result()
+                 avg_regular_t_minus_4, avg_regular_t_minus_3, avg_regular_t_minus_2, avg_regular_t_minus_1, avg_regular_t_plus_1, avg_regular_t_plus_2, avg_regular_t_plus_3, avg_regular_t_plus_4,
+                 avg_spin_t_minus_4, avg_spin_t_minus_3, avg_spin_t_minus_2, avg_spin_t_minus_1, avg_spin_t_plus_1, avg_spin_t_plus_2, avg_spin_t_plus_3, avg_spin_t_plus_4,
+                 avg_velocity_t_minus_4, avg_velocity_t_minus_3, avg_velocity_t_minus_2, avg_velocity_t_minus_1, avg_velocity_t_plus_1, avg_velocity_t_plus_2, avg_velocity_t_plus_3, avg_velocity_t_plus_4,
+                 avg_velocity_playoff_t_minus_4, avg_velocity_playoff_t_minus_3, avg_velocity_playoff_t_minus_2, avg_velocity_playoff_t_minus_1, avg_velocity_playoff_t_plus_1, avg_velocity_playoff_t_plus_2, avg_velocity_playoff_t_plus_3, avg_velocity_playoff_t_plus_4,
+                 gs_t_minus_4, gs_t_minus_3, gs_t_minus_2, gs_t_minus_1, gs_t_plus_1, gs_t_plus_2, gs_t_plus_3, gs_t_plus_4,
+                 sv_t_minus_4, sv_t_minus_3, sv_t_minus_2, sv_t_minus_1, sv_t_plus_1, sv_t_plus_2, sv_t_plus_3, sv_t_plus_4,
+                 relief_app_t_minus_4, relief_app_t_minus_3, relief_app_t_minus_2, relief_app_t_minus_1, relief_app_t_plus_1, relief_app_t_plus_2, relief_app_t_plus_3, relief_app_t_plus_4,
+                 ff_pct_t_minus_4, ff_pct_t_minus_3, ff_pct_t_minus_2, ff_pct_t_minus_1, ff_pct_t_plus_1, ff_pct_t_plus_2, ff_pct_t_plus_3, ff_pct_t_plus_4,
+                 si_pct_t_minus_4, si_pct_t_minus_3, si_pct_t_minus_2, si_pct_t_minus_1, si_pct_t_plus_1, si_pct_t_plus_2, si_pct_t_plus_3, si_pct_t_plus_4,
+                 sl_pct_t_minus_4, sl_pct_t_minus_3, sl_pct_t_minus_2, sl_pct_t_minus_1, sl_pct_t_plus_1, sl_pct_t_plus_2, sl_pct_t_plus_3, sl_pct_t_plus_4,
+                 cu_pct_t_minus_4, cu_pct_t_minus_3, cu_pct_t_minus_2, cu_pct_t_minus_1, cu_pct_t_plus_1, cu_pct_t_plus_2, cu_pct_t_plus_3, cu_pct_t_plus_4,
+                 ch_pct_t_minus_4, ch_pct_t_minus_3, ch_pct_t_minus_2, ch_pct_t_minus_1, ch_pct_t_plus_1, ch_pct_t_plus_2, ch_pct_t_plus_3, ch_pct_t_plus_4,
+                 fc_pct_t_minus_4, fc_pct_t_minus_3, fc_pct_t_minus_2, fc_pct_t_minus_1, fc_pct_t_plus_1, fc_pct_t_plus_2, fc_pct_t_plus_3, fc_pct_t_plus_4) = future.result()
                 cleaned_data.at[idx, 'avg_pitches_t_minus_4'] = avg_t_minus_4
                 cleaned_data.at[idx, 'avg_pitches_t_minus_3'] = avg_t_minus_3
                 cleaned_data.at[idx, 'avg_pitches_t_minus_2'] = avg_t_minus_2
@@ -419,6 +846,102 @@ def main():
                 cleaned_data.at[idx, 'avg_pitches_regular_t_plus_2'] = avg_regular_t_plus_2
                 cleaned_data.at[idx, 'avg_pitches_regular_t_plus_3'] = avg_regular_t_plus_3
                 cleaned_data.at[idx, 'avg_pitches_regular_t_plus_4'] = avg_regular_t_plus_4
+                cleaned_data.at[idx, 'avg_spin_rate_t_minus_4'] = avg_spin_t_minus_4
+                cleaned_data.at[idx, 'avg_spin_rate_t_minus_3'] = avg_spin_t_minus_3
+                cleaned_data.at[idx, 'avg_spin_rate_t_minus_2'] = avg_spin_t_minus_2
+                cleaned_data.at[idx, 'avg_spin_rate_t_minus_1'] = avg_spin_t_minus_1
+                cleaned_data.at[idx, 'avg_spin_rate_t_plus_1'] = avg_spin_t_plus_1
+                cleaned_data.at[idx, 'avg_spin_rate_t_plus_2'] = avg_spin_t_plus_2
+                cleaned_data.at[idx, 'avg_spin_rate_t_plus_3'] = avg_spin_t_plus_3
+                cleaned_data.at[idx, 'avg_spin_rate_t_plus_4'] = avg_spin_t_plus_4
+                cleaned_data.at[idx, 'avg_velocity_t_minus_4'] = avg_velocity_t_minus_4
+                cleaned_data.at[idx, 'avg_velocity_t_minus_3'] = avg_velocity_t_minus_3
+                cleaned_data.at[idx, 'avg_velocity_t_minus_2'] = avg_velocity_t_minus_2
+                cleaned_data.at[idx, 'avg_velocity_t_minus_1'] = avg_velocity_t_minus_1
+                cleaned_data.at[idx, 'avg_velocity_t_plus_1'] = avg_velocity_t_plus_1
+                cleaned_data.at[idx, 'avg_velocity_t_plus_2'] = avg_velocity_t_plus_2
+                cleaned_data.at[idx, 'avg_velocity_t_plus_3'] = avg_velocity_t_plus_3
+                cleaned_data.at[idx, 'avg_velocity_t_plus_4'] = avg_velocity_t_plus_4
+                cleaned_data.at[idx, 'avg_velocity_playoff_t_minus_4'] = avg_velocity_playoff_t_minus_4
+                cleaned_data.at[idx, 'avg_velocity_playoff_t_minus_3'] = avg_velocity_playoff_t_minus_3
+                cleaned_data.at[idx, 'avg_velocity_playoff_t_minus_2'] = avg_velocity_playoff_t_minus_2
+                cleaned_data.at[idx, 'avg_velocity_playoff_t_minus_1'] = avg_velocity_playoff_t_minus_1
+                cleaned_data.at[idx, 'avg_velocity_playoff_t_plus_1'] = avg_velocity_playoff_t_plus_1
+                cleaned_data.at[idx, 'avg_velocity_playoff_t_plus_2'] = avg_velocity_playoff_t_plus_2
+                cleaned_data.at[idx, 'avg_velocity_playoff_t_plus_3'] = avg_velocity_playoff_t_plus_3
+                cleaned_data.at[idx, 'avg_velocity_playoff_t_plus_4'] = avg_velocity_playoff_t_plus_4
+                cleaned_data.at[idx, 'gs_t_minus_4'] = gs_t_minus_4
+                cleaned_data.at[idx, 'gs_t_minus_3'] = gs_t_minus_3
+                cleaned_data.at[idx, 'gs_t_minus_2'] = gs_t_minus_2
+                cleaned_data.at[idx, 'gs_t_minus_1'] = gs_t_minus_1
+                cleaned_data.at[idx, 'gs_t_plus_1'] = gs_t_plus_1
+                cleaned_data.at[idx, 'gs_t_plus_2'] = gs_t_plus_2
+                cleaned_data.at[idx, 'gs_t_plus_3'] = gs_t_plus_3
+                cleaned_data.at[idx, 'gs_t_plus_4'] = gs_t_plus_4
+                cleaned_data.at[idx, 'sv_t_minus_4'] = sv_t_minus_4
+                cleaned_data.at[idx, 'sv_t_minus_3'] = sv_t_minus_3
+                cleaned_data.at[idx, 'sv_t_minus_2'] = sv_t_minus_2
+                cleaned_data.at[idx, 'sv_t_minus_1'] = sv_t_minus_1
+                cleaned_data.at[idx, 'sv_t_plus_1'] = sv_t_plus_1
+                cleaned_data.at[idx, 'sv_t_plus_2'] = sv_t_plus_2
+                cleaned_data.at[idx, 'sv_t_plus_3'] = sv_t_plus_3
+                cleaned_data.at[idx, 'sv_t_plus_4'] = sv_t_plus_4
+                cleaned_data.at[idx, 'relief_app_t_minus_4'] = relief_app_t_minus_4
+                cleaned_data.at[idx, 'relief_app_t_minus_3'] = relief_app_t_minus_3
+                cleaned_data.at[idx, 'relief_app_t_minus_2'] = relief_app_t_minus_2
+                cleaned_data.at[idx, 'relief_app_t_minus_1'] = relief_app_t_minus_1
+                cleaned_data.at[idx, 'relief_app_t_plus_1'] = relief_app_t_plus_1
+                cleaned_data.at[idx, 'relief_app_t_plus_2'] = relief_app_t_plus_2
+                cleaned_data.at[idx, 'relief_app_t_plus_3'] = relief_app_t_plus_3
+                cleaned_data.at[idx, 'relief_app_t_plus_4'] = relief_app_t_plus_4
+                cleaned_data.at[idx, 'ff_pct_t_minus_4'] = ff_pct_t_minus_4
+                cleaned_data.at[idx, 'ff_pct_t_minus_3'] = ff_pct_t_minus_3
+                cleaned_data.at[idx, 'ff_pct_t_minus_2'] = ff_pct_t_minus_2
+                cleaned_data.at[idx, 'ff_pct_t_minus_1'] = ff_pct_t_minus_1
+                cleaned_data.at[idx, 'ff_pct_t_plus_1'] = ff_pct_t_plus_1
+                cleaned_data.at[idx, 'ff_pct_t_plus_2'] = ff_pct_t_plus_2
+                cleaned_data.at[idx, 'ff_pct_t_plus_3'] = ff_pct_t_plus_3
+                cleaned_data.at[idx, 'ff_pct_t_plus_4'] = ff_pct_t_plus_4
+                cleaned_data.at[idx, 'si_pct_t_minus_4'] = si_pct_t_minus_4
+                cleaned_data.at[idx, 'si_pct_t_minus_3'] = si_pct_t_minus_3
+                cleaned_data.at[idx, 'si_pct_t_minus_2'] = si_pct_t_minus_2
+                cleaned_data.at[idx, 'si_pct_t_minus_1'] = si_pct_t_minus_1
+                cleaned_data.at[idx, 'si_pct_t_plus_1'] = si_pct_t_plus_1
+                cleaned_data.at[idx, 'si_pct_t_plus_2'] = si_pct_t_plus_2
+                cleaned_data.at[idx, 'si_pct_t_plus_3'] = si_pct_t_plus_3
+                cleaned_data.at[idx, 'si_pct_t_plus_4'] = si_pct_t_plus_4
+                cleaned_data.at[idx, 'sl_pct_t_minus_4'] = sl_pct_t_minus_4
+                cleaned_data.at[idx, 'sl_pct_t_minus_3'] = sl_pct_t_minus_3
+                cleaned_data.at[idx, 'sl_pct_t_minus_2'] = sl_pct_t_minus_2
+                cleaned_data.at[idx, 'sl_pct_t_minus_1'] = sl_pct_t_minus_1
+                cleaned_data.at[idx, 'sl_pct_t_plus_1'] = sl_pct_t_plus_1
+                cleaned_data.at[idx, 'sl_pct_t_plus_2'] = sl_pct_t_plus_2
+                cleaned_data.at[idx, 'sl_pct_t_plus_3'] = sl_pct_t_plus_3
+                cleaned_data.at[idx, 'sl_pct_t_plus_4'] = sl_pct_t_plus_4
+                cleaned_data.at[idx, 'cu_pct_t_minus_4'] = cu_pct_t_minus_4
+                cleaned_data.at[idx, 'cu_pct_t_minus_3'] = cu_pct_t_minus_3
+                cleaned_data.at[idx, 'cu_pct_t_minus_2'] = cu_pct_t_minus_2
+                cleaned_data.at[idx, 'cu_pct_t_minus_1'] = cu_pct_t_minus_1
+                cleaned_data.at[idx, 'cu_pct_t_plus_1'] = cu_pct_t_plus_1
+                cleaned_data.at[idx, 'cu_pct_t_plus_2'] = cu_pct_t_plus_2
+                cleaned_data.at[idx, 'cu_pct_t_plus_3'] = cu_pct_t_plus_3
+                cleaned_data.at[idx, 'cu_pct_t_plus_4'] = cu_pct_t_plus_4
+                cleaned_data.at[idx, 'ch_pct_t_minus_4'] = ch_pct_t_minus_4
+                cleaned_data.at[idx, 'ch_pct_t_minus_3'] = ch_pct_t_minus_3
+                cleaned_data.at[idx, 'ch_pct_t_minus_2'] = ch_pct_t_minus_2
+                cleaned_data.at[idx, 'ch_pct_t_minus_1'] = ch_pct_t_minus_1
+                cleaned_data.at[idx, 'ch_pct_t_plus_1'] = ch_pct_t_plus_1
+                cleaned_data.at[idx, 'ch_pct_t_plus_2'] = ch_pct_t_plus_2
+                cleaned_data.at[idx, 'ch_pct_t_plus_3'] = ch_pct_t_plus_3
+                cleaned_data.at[idx, 'ch_pct_t_plus_4'] = ch_pct_t_plus_4
+                cleaned_data.at[idx, 'fc_pct_t_minus_4'] = fc_pct_t_minus_4
+                cleaned_data.at[idx, 'fc_pct_t_minus_3'] = fc_pct_t_minus_3
+                cleaned_data.at[idx, 'fc_pct_t_minus_2'] = fc_pct_t_minus_2
+                cleaned_data.at[idx, 'fc_pct_t_minus_1'] = fc_pct_t_minus_1
+                cleaned_data.at[idx, 'fc_pct_t_plus_1'] = fc_pct_t_plus_1
+                cleaned_data.at[idx, 'fc_pct_t_plus_2'] = fc_pct_t_plus_2
+                cleaned_data.at[idx, 'fc_pct_t_plus_3'] = fc_pct_t_plus_3
+                cleaned_data.at[idx, 'fc_pct_t_plus_4'] = fc_pct_t_plus_4
                 if (avg_t_minus_4 is None and avg_t_minus_3 is None and avg_t_minus_2 is None and avg_before is None and 
                     avg_after is None and avg_t_plus_2 is None and avg_t_plus_3 is None and avg_t_plus_4 is None):
                     players_no_data.append(cleaned_data.at[idx, 'Name'])
